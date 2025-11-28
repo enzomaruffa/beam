@@ -1248,6 +1248,171 @@ class TestGeographyTypeSupport(unittest.TestCase):
     self.assertIsInstance(result, str)
 
 
+@unittest.skipIf(HttpError is None, 'GCP dependencies are not installed')
+class TestDatetimeTypeSupport(unittest.TestCase):
+  """Tests for DATETIME data type support in BigQuery."""
+  def test_datetime_in_bigquery_type_mapping(self):
+    """Test that DATETIME is properly mapped in type mapping."""
+    from apache_beam.io.gcp.bigquery_tools import BIGQUERY_TYPE_TO_PYTHON_TYPE
+
+    self.assertIn("DATETIME", BIGQUERY_TYPE_TO_PYTHON_TYPE)
+    self.assertEqual(BIGQUERY_TYPE_TO_PYTHON_TYPE["DATETIME"], str)
+
+  def test_datetime_field_conversion(self):
+    """Test that DATETIME fields are converted correctly."""
+    from apache_beam.io.gcp.bigquery_tools import BigQueryWrapper
+
+    # Create a mock field with DATETIME type
+    field = bigquery.TableFieldSchema()
+    field.type = 'DATETIME'
+    field.name = 'event_time'
+    field.mode = 'NULLABLE'
+
+    wrapper = BigQueryWrapper(client=mock.Mock())
+
+    # Test various DATETIME formats
+    test_cases = [
+        "2021-01-15T10:30:00",
+        "2021-01-15T10:30:00.123456",
+        "2021-01-15T00:00:00",
+        "2021-01-15T23:59:59",
+        "2000-01-01T00:00:00",
+    ]
+
+    for datetime_value in test_cases:
+      result = wrapper._convert_cell_value_to_dict(datetime_value, field)
+      self.assertEqual(result, datetime_value)
+      self.assertIsInstance(result, str)
+
+  def test_datetime_typehints_from_schema(self):
+    """Test that DATETIME fields generate correct type hints."""
+    schema = {
+        "fields": [{
+            "name": "event_time", "type": "DATETIME", "mode": "REQUIRED"
+        },
+                   {
+                       "name": "optional_time",
+                       "type": "DATETIME",
+                       "mode": "NULLABLE"
+                   }, {
+                       "name": "timestamps",
+                       "type": "DATETIME",
+                       "mode": "REPEATED"
+                   }]
+    }
+
+    typehints = get_beam_typehints_from_tableschema(schema)
+
+    expected_typehints = [("event_time", str),
+                          ("optional_time", Optional[str]),
+                          ("timestamps", Sequence[str])]
+
+    self.assertEqual(typehints, expected_typehints)
+
+  def test_datetime_beam_row_conversion(self):
+    """Test converting dictionary with DATETIME to Beam Row."""
+    schema = {
+        "fields": [{
+            "name": "id", "type": "INTEGER", "mode": "REQUIRED"
+        }, {
+            "name": "event_time", "type": "DATETIME", "mode": "NULLABLE"
+        }, {
+            "name": "name", "type": "STRING", "mode": "REQUIRED"
+        }]
+    }
+
+    row_dict = {
+        "id": 1,
+        "event_time": "2021-01-15T10:30:00",
+        "name": "Test Event"
+    }
+
+    beam_row = beam_row_from_dict(row_dict, schema)
+
+    self.assertEqual(beam_row.id, 1)
+    self.assertEqual(beam_row.event_time, "2021-01-15T10:30:00")
+    self.assertEqual(beam_row.name, "Test Event")
+
+  def test_datetime_beam_row_conversion_with_null(self):
+    """Test converting dictionary with null DATETIME to Beam Row."""
+    schema = {
+        "fields": [{
+            "name": "id", "type": "INTEGER", "mode": "REQUIRED"
+        }, {
+            "name": "event_time", "type": "DATETIME", "mode": "NULLABLE"
+        }]
+    }
+
+    row_dict = {"id": 1, "event_time": None}
+
+    beam_row = beam_row_from_dict(row_dict, schema)
+
+    self.assertEqual(beam_row.id, 1)
+    self.assertIsNone(beam_row.event_time)
+
+  def test_datetime_beam_row_conversion_repeated(self):
+    """Test converting dictionary with repeated DATETIME to Beam Row."""
+    schema = {
+        "fields": [{
+            "name": "id", "type": "INTEGER", "mode": "REQUIRED"
+        }, {
+            "name": "timestamps", "type": "DATETIME", "mode": "REPEATED"
+        }]
+    }
+
+    row_dict = {
+        "id": 1,
+        "timestamps": [
+            "2021-01-15T10:30:00",
+            "2021-01-15T11:30:00",
+            "2021-01-15T12:30:00"
+        ]
+    }
+
+    beam_row = beam_row_from_dict(row_dict, schema)
+
+    self.assertEqual(beam_row.id, 1)
+    self.assertEqual(len(beam_row.timestamps), 3)
+    self.assertEqual(beam_row.timestamps[0], "2021-01-15T10:30:00")
+    self.assertEqual(beam_row.timestamps[1], "2021-01-15T11:30:00")
+    self.assertEqual(beam_row.timestamps[2], "2021-01-15T12:30:00")
+
+  def test_datetime_json_encoding(self):
+    """Test that DATETIME values are properly JSON encoded."""
+    coder = RowAsDictJsonCoder()
+
+    row_with_datetime = {
+        "id": 1,
+        "event_time": "2021-01-15T10:30:00",
+        "name": "Test"
+    }
+
+    encoded = coder.encode(row_with_datetime)
+    decoded = coder.decode(encoded)
+
+    self.assertEqual(decoded["event_time"], "2021-01-15T10:30:00")
+    self.assertIsInstance(decoded["event_time"], str)
+
+  def test_datetime_with_microseconds(self):
+    """Test DATETIME values with microsecond precision."""
+    from apache_beam.io.gcp.bigquery_tools import BigQueryWrapper
+
+    field = bigquery.TableFieldSchema()
+    field.type = 'DATETIME'
+    field.name = 'precise_time'
+    field.mode = 'NULLABLE'
+
+    wrapper = BigQueryWrapper(client=mock.Mock())
+
+    # Test DATETIME with microseconds
+    datetime_with_microseconds = "2021-01-15T10:30:00.123456"
+
+    result = wrapper._convert_cell_value_to_dict(
+        datetime_with_microseconds, field)
+    self.assertEqual(result, datetime_with_microseconds)
+    self.assertIsInstance(result, str)
+
+
 if __name__ == '__main__':
   logging.getLogger().setLevel(logging.INFO)
   unittest.main()
