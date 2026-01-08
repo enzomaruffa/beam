@@ -1,0 +1,14 @@
+# Build requirements for Apache Beam Python SDK
+# Install with: pip install -r build-requirements.txt
+
+# Proto generation
+grpcio-tools<1.66.0
+mypy-protobuf
+
+# External transform wrapper generation
+pyyaml
+jinja2
+
+# Build tools
+setuptools
+yapf

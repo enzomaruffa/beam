@@ -96,6 +96,58 @@ class TestBigQueryToSchema(unittest.TestCase):
             'times': typing.Optional[apache_beam.utils.timestamp.Timestamp]
         })
 
+  def test_check_schema_conversions_with_datetime(self):
+    fields = [
+        bigquery.TableFieldSchema(name='stn', type='STRING', mode="NULLABLE"),
+        bigquery.TableFieldSchema(name='temp', type='FLOAT64', mode="REPEATED"),
+        bigquery.TableFieldSchema(
+            name='event_time', type='DATETIME', mode="NULLABLE")
+    ]
+    schema = bigquery.TableSchema(fields=fields)
+
+    usertype = bigquery_schema_tools.generate_user_type_from_bq_schema(
+        the_table_schema=schema)
+    self.assertEqual(
+        usertype.__annotations__,
+        {
+            'stn': typing.Optional[str],
+            'temp': typing.Sequence[np.float64],
+            'event_time': typing.Optional[str]
+        })
+
+  def test_check_schema_conversions_with_json(self):
+    fields = [
+        bigquery.TableFieldSchema(name='id', type='INTEGER', mode="REQUIRED"),
+        bigquery.TableFieldSchema(name='data', type='JSON', mode="NULLABLE")
+    ]
+    schema = bigquery.TableSchema(fields=fields)
+
+    usertype = bigquery_schema_tools.generate_user_type_from_bq_schema(
+        the_table_schema=schema)
+    self.assertEqual(
+        usertype.__annotations__,
+        {
+            'id': np.int64,
+            'data': typing.Optional[str]
+        })
+
+  def test_check_schema_conversions_with_date(self):
+    fields = [
+        bigquery.TableFieldSchema(name='id', type='INTEGER', mode="REQUIRED"),
+        bigquery.TableFieldSchema(
+            name='birth_date', type='DATE', mode="NULLABLE")
+    ]
+    schema = bigquery.TableSchema(fields=fields)
+
+    usertype = bigquery_schema_tools.generate_user_type_from_bq_schema(
+        the_table_schema=schema)
+    self.assertEqual(
+        usertype.__annotations__,
+        {
+            'id': np.int64,
+            'birth_date': typing.Optional[str]
+        })
+
   def test_unsupported_type(self):
     fields = [
         bigquery.TableFieldSchema(
